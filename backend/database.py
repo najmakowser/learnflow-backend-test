@@ -410,6 +410,14 @@ SQLITE_ALTER_STATEMENTS = [
     "ALTER TABLE course_requests ADD COLUMN training_id TEXT",
     "ALTER TABLE course_requests ADD COLUMN requested_by_rm INTEGER DEFAULT 0",
     "ALTER TABLE course_requests ADD COLUMN fh_approved_note TEXT",
+    # trainer + date on request tables (set only by L&D)
+    "ALTER TABLE course_requests ADD COLUMN trainer_name TEXT",
+    "ALTER TABLE course_requests ADD COLUMN training_date TEXT",
+    "ALTER TABLE nomination_requests ADD COLUMN trainer_name TEXT",
+    "ALTER TABLE course_requests ADD COLUMN participants_requested_date TEXT",
+    "ALTER TABLE nomination_requests ADD COLUMN participants_requested_date TEXT",
+    "ALTER TABLE nomination_requests ADD COLUMN curriculum_rejection_comment TEXT",
+    "ALTER TABLE course_requests ADD COLUMN curriculum_rejection_comment TEXT",
     # L&D Training Release flow
     "ALTER TABLE trainings ADD COLUMN released_to_domains TEXT DEFAULT ''",
     "ALTER TABLE trainings ADD COLUMN release_date TEXT DEFAULT ''",
