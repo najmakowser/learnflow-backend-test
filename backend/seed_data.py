@@ -302,7 +302,13 @@ def seed():
     c = conn.cursor()
 
     if c.execute("SELECT COUNT(*) FROM trainings").fetchone()[0] == 0:
-        c.executemany("INSERT INTO trainings VALUES (?,?,?,?,?,?,?,?,?,?)", TRAININGS)
+        c.executemany(
+    """INSERT INTO trainings
+       (training_id, course_name, category, mode, duration, trainer_name,
+        training_date, seats_available, skill_tags, status)
+       VALUES (?,?,?,?,?,?,?,?,?,?)""",
+    TRAININGS
+)
 
     roster_entries = load_from_excel(DATASET_XLSX)
     credential_entries = []
