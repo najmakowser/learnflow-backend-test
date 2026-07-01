@@ -57,7 +57,10 @@ CREATE TABLE IF NOT EXISTS trainings (
     batches TEXT,
     curriculum_file_name TEXT DEFAULT '',
     curriculum_file_url TEXT DEFAULT '',
-    source_request_id TEXT DEFAULT ''
+    source_request_id TEXT DEFAULT '',
+    released_to_domains TEXT DEFAULT '',
+    release_date TEXT DEFAULT '',
+    curriculum_summary TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS registration_requests (
@@ -204,7 +207,10 @@ POSTGRES_BOOTSTRAP = [
         batches TEXT,
         curriculum_file_name TEXT DEFAULT '',
         curriculum_file_url TEXT DEFAULT '',
-        source_request_id TEXT DEFAULT ''
+        source_request_id TEXT DEFAULT '',
+        released_to_domains TEXT DEFAULT '',
+        release_date TEXT DEFAULT '',
+        curriculum_summary TEXT DEFAULT ''
     )
     """,
     """
@@ -397,6 +403,9 @@ SQLITE_ALTER_STATEMENTS = [
     "ALTER TABLE trainings ADD COLUMN curriculum_file_name TEXT",
     "ALTER TABLE trainings ADD COLUMN curriculum_file_url TEXT",
     "ALTER TABLE trainings ADD COLUMN training_date TEXT",
+    "ALTER TABLE trainings ADD COLUMN trainer_name TEXT",
+    "ALTER TABLE trainings ADD COLUMN batches TEXT",
+    "ALTER TABLE trainings ADD COLUMN source_request_id TEXT DEFAULT ''",
     """CREATE TABLE IF NOT EXISTS course_request_participants (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     request_id TEXT,
@@ -694,6 +703,17 @@ def init_db():
             HAVING COUNT(*) > 0 AND SUM(CASE WHEN confirmation_sent=0 THEN 1 ELSE 0 END) = 0
         )
     """)
+
+    # Ensure columns required by startup backfill exist before reading them.
+    for stmt in (
+        "ALTER TABLE course_requests ADD COLUMN trainer_name TEXT",
+        "ALTER TABLE course_requests ADD COLUMN training_date TEXT",
+        "ALTER TABLE course_requests ADD COLUMN training_id TEXT",
+    ):
+        try:
+            c.execute(stmt)
+        except Exception:
+            pass
 
     # Backfill: create Training Catalog entries for course_requests that were enrolled
     # before the auto-catalog feature was added (no training_id set yet).
