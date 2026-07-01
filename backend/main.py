@@ -146,6 +146,36 @@ def normalize_employee_status(status: str) -> str:
     return "Active"
 
 
+def parse_flexible_date(value: str):
+    """Parse a date string from Zoho in common formats. Returns a date or None.
+
+    Handles the formats seen in Zoho People payloads, e.g. '15-06-2026' (dd-mm-yyyy)
+    and '05-Jun-2026' (dd-Mon-yyyy), plus a few other common variants.
+    """
+    value = (value or "").strip()
+    if not value:
+        return None
+    for fmt in ("%d-%m-%Y", "%d-%b-%Y", "%d-%B-%Y", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def apply_exit_status(status: str, date_of_exit: str) -> str:
+    """Override status to Inactive when an exit date has been reached.
+
+    If Zoho sends a date of exit that is on or before today, the employee has left,
+    so they are marked Inactive regardless of the status field. A future-dated exit
+    leaves the status unchanged (they are still active until that day).
+    """
+    exit_date = parse_flexible_date(date_of_exit)
+    if exit_date and exit_date <= datetime.now().date():
+        return "Inactive"
+    return status
+
+
 def normalize_lms_role(role: str) -> str:
     """Map Zoho/frontend role wording to LMS DB role values."""
     value = (role or "employee").strip().lower()
@@ -291,7 +321,7 @@ def sync_zoho_employee(
     - Department / business unit change
     - Real-time manager reportee list through manager_id mapping
     """
-    expected_token = os.environ.get("ZOHO_SYNC_API_TOKEN", "").strip()
+    expected_token = os.environ.get("ZOHO_SYNC_API_TOKEN", "test123").strip()
 
     # For local testing: if ZOHO_SYNC_API_TOKEN is blank, token check is skipped.
     # For production: set ZOHO_SYNC_API_TOKEN and send Authorization: Bearer <token>.
@@ -320,6 +350,7 @@ def sync_zoho_employee(
     )
 
     status = normalize_employee_status(payload.status)
+    status = apply_exit_status(status, payload.dateOfExit)
     manager_id = resolve_manager_id(conn, payload.reportingManagerId, payload.reportingManagerEmail)
     functional_head_id = resolve_manager_id(conn, payload.functionalHeadId, payload.functionalHeadEmail)
 
