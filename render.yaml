@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: lms-nomination-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: LMS_DATA_DIR
+        value: /var/data
+      - key: PYTHON_VERSION
+        value: 3.11.11
+    disks:
+      - name: lms-data
+        mountPath: /var/data
+        sizeGB: 1

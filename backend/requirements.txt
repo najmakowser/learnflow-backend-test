@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pydantic
+openai
+anthropic
+python-dotenv
+python-multipart
+psycopg[binary]
+openpyxl
