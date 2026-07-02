@@ -597,6 +597,14 @@ class PostgresConnectionAdapter:
     def rollback(self):
         self._connection.rollback()
 
+    @property
+    def autocommit(self):
+        return self._connection.autocommit
+
+    @autocommit.setter
+    def autocommit(self, value):
+        self._connection.autocommit = value
+
     def close(self):
         self._connection.close()
 
@@ -625,6 +633,16 @@ def get_connection():
 
 def init_db():
     conn = get_connection()
+
+    # On PostgreSQL a single failed statement aborts the whole transaction, so the
+    # idempotent "ALTER TABLE ... ADD COLUMN" migrations below (whose failures are
+    # intentionally swallowed) would poison every subsequent statement. Running
+    # schema setup in autocommit mode isolates each statement so a harmless
+    # "column already exists" error can't break startup. This connection is local
+    # to init_db, so request handlers keep their normal transactional behaviour.
+    if using_postgres():
+        conn.autocommit = True
+
     c = conn.cursor()
 
     if using_postgres():
