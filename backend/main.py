@@ -135,8 +135,12 @@ def ensure_zoho_sync_columns(conn):
     for stmt in columns:
         try:
             conn.execute(stmt)
+            conn.commit()
         except Exception:
-            pass
+            # On Postgres a failed statement aborts the whole transaction; roll back
+            # so the "column already exists" case doesn't poison the caller's
+            # subsequent INSERT/UPDATE. Harmless on SQLite.
+            conn.rollback()
 
 
 def normalize_employee_status(status: str) -> str:
