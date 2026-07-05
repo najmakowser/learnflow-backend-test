@@ -315,7 +315,21 @@ def seed():
     roster_ids = {entry["employee_id"] for entry in roster_entries if entry.get("employee_id")}
     if roster_ids:
         existing_ids = [row[0] for row in c.execute("SELECT employee_id FROM employees").fetchall()]
-        stale_ids = [employee_id for employee_id in existing_ids if employee_id not in roster_ids]
+        # Never delete employees that came from Zoho People sync — they aren't in
+        # dataset.xlsx but must survive restarts/redeploys. Only prune seed-managed
+        # employees that are no longer in the roster file.
+        protected_ids = {
+            row[0]
+            for row in c.execute(
+                "SELECT employee_id FROM employees "
+                "WHERE last_synced_from_zoho IS NOT NULL AND last_synced_from_zoho <> ''"
+            ).fetchall()
+        }
+        stale_ids = [
+            employee_id
+            for employee_id in existing_ids
+            if employee_id not in roster_ids and employee_id not in protected_ids
+        ]
         if stale_ids:
             placeholders = _placeholders(stale_ids)
             c.execute(f"DELETE FROM employees WHERE employee_id IN ({placeholders})", stale_ids)

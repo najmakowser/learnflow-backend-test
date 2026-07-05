@@ -360,6 +360,14 @@ POSTGRES_BOOTSTRAP = [
 
 SQLITE_ALTER_STATEMENTS = [
     "ALTER TABLE employees ADD COLUMN password_hash TEXT",
+    # Zoho People sync columns (also added at request time; kept here so they always exist)
+    "ALTER TABLE employees ADD COLUMN status TEXT DEFAULT 'Active'",
+    "ALTER TABLE employees ADD COLUMN reporting_manager_email TEXT",
+    "ALTER TABLE employees ADD COLUMN functional_head_id TEXT",
+    "ALTER TABLE employees ADD COLUMN functional_head_email TEXT",
+    "ALTER TABLE employees ADD COLUMN date_of_joining TEXT",
+    "ALTER TABLE employees ADD COLUMN date_of_exit TEXT",
+    "ALTER TABLE employees ADD COLUMN last_synced_from_zoho TEXT",
     "ALTER TABLE registration_requests ADD COLUMN manager_id TEXT",
     "ALTER TABLE registration_requests ADD COLUMN training_date TEXT",
     "ALTER TABLE nomination_requests ADD COLUMN training_date TEXT",
@@ -456,6 +464,14 @@ SQLITE_ALTER_STATEMENTS = [
 
 POSTGRES_ALTER_STATEMENTS = [
     "ALTER TABLE employees ADD COLUMN IF NOT EXISTS password_hash TEXT",
+    # Zoho People sync columns (also added at request time; kept here so they always exist)
+    "ALTER TABLE employees ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Active'",
+    "ALTER TABLE employees ADD COLUMN IF NOT EXISTS reporting_manager_email TEXT",
+    "ALTER TABLE employees ADD COLUMN IF NOT EXISTS functional_head_id TEXT",
+    "ALTER TABLE employees ADD COLUMN IF NOT EXISTS functional_head_email TEXT",
+    "ALTER TABLE employees ADD COLUMN IF NOT EXISTS date_of_joining TEXT",
+    "ALTER TABLE employees ADD COLUMN IF NOT EXISTS date_of_exit TEXT",
+    "ALTER TABLE employees ADD COLUMN IF NOT EXISTS last_synced_from_zoho TEXT",
     "ALTER TABLE registration_requests ADD COLUMN IF NOT EXISTS manager_id TEXT",
     "ALTER TABLE registration_requests ADD COLUMN IF NOT EXISTS training_date TEXT",
     "ALTER TABLE nomination_requests ADD COLUMN IF NOT EXISTS training_date TEXT",
