@@ -212,12 +212,73 @@ def find_employee_id_by_email(conn, email: str) -> str:
     return found["employee_id"] if found else ""
 
 
-def resolve_manager_id(conn, manager_id: str, manager_email: str) -> str:
-    """Prefer Zoho manager id. If blank, resolve LMS employee_id from manager email."""
-    manager_id = (manager_id or "").strip()
-    if manager_id:
-        return manager_id
-    return find_employee_id_by_email(conn, manager_email)
+def _extract_zoho_id(ref: str) -> str:
+    """Zoho lookup fields arrive as 'Full Name - EmployeeID'
+    (e.g. 'Najma Kowser Siddicque - 3772'). Return just the ID portion."""
+    ref = (ref or "").strip()
+    if not ref:
+        return ""
+    if " - " in ref:
+        return ref.rsplit(" - ", 1)[-1].strip()
+    return ref
+
+
+def find_employee_id_by_name(conn, name: str) -> str:
+    name = (name or "").strip()
+    if not name:
+        return ""
+    found = row(conn.execute(
+        "SELECT employee_id FROM employees WHERE lower(name)=lower(?) LIMIT 1",
+        (name,),
+    ))
+    return found["employee_id"] if found else ""
+
+
+def employee_exists(conn, employee_id: str) -> bool:
+    employee_id = (employee_id or "").strip()
+    if not employee_id:
+        return False
+    return row(conn.execute(
+        "SELECT employee_id FROM employees WHERE employee_id=? LIMIT 1",
+        (employee_id,),
+    )) is not None
+
+
+def resolve_manager_id(conn, manager_ref: str, manager_email: str) -> str:
+    """Resolve an LMS employee_id for a manager/functional head coming from Zoho.
+
+    Zoho lookup fields arrive as 'Full Name - EmployeeID', so storing them raw
+    breaks the manager->reportee linkage. Resolution order:
+      1. Email match (most reliable when provided).
+      2. Extracted employee ID that already exists in the LMS.
+      3. Name match against existing employees.
+      4. Fall back to the extracted ID, so the link resolves once that manager is
+         itself synced from Zoho with the same ID.
+    """
+    manager_ref = (manager_ref or "").strip()
+
+    # 1. Email is the most reliable signal.
+    by_email = find_employee_id_by_email(conn, manager_email)
+    if by_email:
+        return by_email
+
+    if not manager_ref:
+        return ""
+
+    candidate_id = _extract_zoho_id(manager_ref)
+
+    # 2. Extracted ID already matches an LMS employee.
+    if employee_exists(conn, candidate_id):
+        return candidate_id
+
+    # 3. Try matching by the name portion.
+    name_part = manager_ref.rsplit(" - ", 1)[0].strip() if " - " in manager_ref else manager_ref
+    by_name = find_employee_id_by_name(conn, name_part)
+    if by_name:
+        return by_name
+
+    # 4. Store the extracted ID so linkage resolves when the manager syncs later.
+    return candidate_id or manager_ref
 
 
 def sync_update_existing_employee(conn, existing_employee_id: str, payload: ZohoEmployeeSyncRequest, status: str, manager_id: str, functional_head_id: str):
