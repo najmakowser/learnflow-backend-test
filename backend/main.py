@@ -15,7 +15,7 @@ import re
 from dotenv import load_dotenv
 load_dotenv()
 
-from database import DATA_DIR, get_connection, init_db, hash_password
+from database import DATA_DIR, get_connection, init_db, hash_password, default_password_for_user
 from seed_data import seed
 
 init_db()
@@ -447,6 +447,20 @@ def sync_zoho_employee(
         sync_insert_new_employee(conn, payload, status, manager_id, functional_head_id)
         action = "created"
         target_employee_id = employee_id
+
+    # Managers / FH / L&D need to log in, but Zoho-synced rows have no password.
+    # Give them a default login password (same scheme as the seed) if none is set yet.
+    # Employees don't have portal login, so they're left without a password.
+    if normalize_lms_role(payload.role) in {"manager", "functional_head", "ld_admin", "ld_manager"}:
+        current = row(conn.execute(
+            "SELECT password_hash FROM employees WHERE employee_id=?",
+            (target_employee_id,),
+        ))
+        if not (current and current.get("password_hash")):
+            conn.execute(
+                "UPDATE employees SET password_hash=? WHERE employee_id=?",
+                (hash_password(default_password_for_user(target_employee_id)), target_employee_id),
+            )
 
     log_action(
         conn,
