@@ -144,9 +144,29 @@ def ensure_zoho_sync_columns(conn):
 
 
 def normalize_employee_status(status: str) -> str:
+    """Map a Zoho People employee status to LMS Active / Inactive.
+
+    Zoho statuses that mean the person is still with the company stay Active;
+    everything indicating an exit/separation becomes Inactive. Matching is by
+    keyword so multi-word statuses (e.g. 'Separated through Resignation',
+    'Transfer to PreludeSys Inc - India') are handled too.
+    """
     value = (status or "").strip().lower()
-    if value in ["inactive", "exit", "exited", "terminated", "resigned", "left", "disabled"]:
+    if not value:
+        return "Active"
+
+    # Statuses that explicitly keep the employee active.
+    if value in {"active", "serving notice period"}:
+        return "Active"
+
+    # Keywords that indicate the employee has left / is inactive.
+    inactive_keywords = (
+        "inactive", "exit", "exited", "terminated", "resign",  # resign covers resigned/resignation
+        "left", "disabled", "abscond", "deceased", "separated", "transfer", "relieved",
+    )
+    if any(keyword in value for keyword in inactive_keywords):
         return "Inactive"
+
     return "Active"
 
 
