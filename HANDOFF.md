@@ -59,12 +59,20 @@ and what's needed to deploy to the **main/production** environment.
   the same value in the Zoho function's `Authorization: Bearer <token>` header.
   Do not ship with `test123`.
 
+## Resolved
+- **Reporting manager / FH mapping (DONE):** Zoho sends these as `'Full Name - EmployeeID'`.
+  `resolve_manager_id` now extracts and resolves the real LMS `employee_id`
+  (by email → extracted ID → name → fallback to extracted ID). Confirmed: a payload
+  of `"Najma Kowser Siddicque - 3772"` is stored as `3772`. Managers are stored in the
+  LMS with their Zoho numeric ID, so linkage connects once the manager is also synced.
+- **Persistence (DONE):** verified `action:"updated"` survives a full rebuild + restart
+  on PostgreSQL.
+
 ## Open items / to review before go-live
-- **Reporting manager mapping:** Zoho sends `reportingManagerId` as a name string
-  (e.g. `"Najma Kowser Siddicque - 3772"`), which is stored as-is and does NOT
-  resolve to an LMS `employee_id`. Manager→reportee linkage may not work. Preferred
-  fix: have Zoho send the manager's **Employee ID**, or map by manager email.
-  Same applies to `functionalHeadId`.
+- **Free-tier cold start:** on Render free tier the instance sleeps after ~15 min idle;
+  the first request takes 50s+ to wake and Zoho returns 'Socket timeout exception'.
+  Fix for prod: use a paid (always-on) instance, or add a retry in the Zoho Deluge
+  function (catch timeout → wait a few seconds → retry once).
 - **Frontend data verification** not yet done (confirm synced employee shows correct
   department / business unit / designation / status in the L&D employee list).
 - **Exit logic edge case:** confirm a *future* `dateOfExit` correctly keeps the
