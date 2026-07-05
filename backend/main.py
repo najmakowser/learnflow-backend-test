@@ -1734,10 +1734,12 @@ def get_dashboard():
     for r in c.execute("SELECT department FROM nomination_requests").fetchall():
         dept_noms[r[0]] = dept_noms.get(r[0], 0) + 1
 
+    today_str = datetime.now().strftime("%Y-%m-%d")
     upcoming = rows(c.execute(
         "SELECT training_id, course_name, mode, trainer_name, seats_available, training_date "
-        "FROM trainings WHERE status='Active' AND training_date >= date('now') "
-        "ORDER BY training_date ASC LIMIT 3"
+        "FROM trainings WHERE status='Active' AND training_date >= ? "
+        "ORDER BY training_date ASC LIMIT 3",
+        (today_str,)
     ))
 
     conn.close()
@@ -2722,8 +2724,9 @@ def fh_summary_pdf(employee_id: str):
     team_crqs = [x for x in all_crqs if x.get("manager_id") in manager_ids or x.get("fh_id") == employee_id]
 
     upcoming = rows(c.execute(
-        "SELECT * FROM trainings WHERE status='Active' AND training_date >= date('now') "
-        "ORDER BY training_date ASC LIMIT 3"
+        "SELECT * FROM trainings WHERE status='Active' AND training_date >= ? "
+        "ORDER BY training_date ASC LIMIT 3",
+        (datetime.now().strftime("%Y-%m-%d"),)
     ))
     conn.close()
 
