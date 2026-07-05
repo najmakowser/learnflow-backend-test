@@ -221,6 +221,26 @@ def normalize_lms_role(role: str) -> str:
     return role_map.get(value, "employee")
 
 
+def derive_lms_role(role_value: str, designation: str) -> str:
+    """Determine the LMS role for a synced person.
+
+    If Zoho sends an explicit non-employee role, honour it. Otherwise infer from the
+    designation text so managers/functional heads sync with the right role (and can log
+    in) even when Zoho only sends 'employee'. For precise control, send an explicit role
+    from Zoho instead of relying on this inference.
+    """
+    explicit = normalize_lms_role(role_value)
+    if explicit != "employee":
+        return explicit
+
+    d = (designation or "").strip().lower()
+    if any(k in d for k in ("functional head", "director", "vice president", "head of")):
+        return "functional_head"
+    if any(k in d for k in ("manager", "lead", "head")):
+        return "manager"
+    return "employee"
+
+
 def find_employee_id_by_email(conn, email: str) -> str:
     email = (email or "").strip().lower()
     if not email:
@@ -436,6 +456,9 @@ def sync_zoho_employee(
 
     status = normalize_employee_status(payload.status)
     status = apply_exit_status(status, payload.dateOfExit)
+    # Resolve the role (explicit from Zoho, else inferred from designation) so managers
+    # and functional heads sync with the correct role and can log in.
+    payload.role = derive_lms_role(payload.role, payload.designation)
     manager_id = resolve_manager_id(conn, payload.reportingManagerId, payload.reportingManagerEmail)
     functional_head_id = resolve_manager_id(conn, payload.functionalHeadId, payload.functionalHeadEmail)
 
