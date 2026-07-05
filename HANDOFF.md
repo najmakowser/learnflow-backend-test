@@ -67,6 +67,11 @@ and what's needed to deploy to the **main/production** environment.
   LMS with their Zoho numeric ID, so linkage connects once the manager is also synced.
 - **Persistence (DONE):** verified `action:"updated"` survives a full rebuild + restart
   on PostgreSQL.
+- **Employee status mapping (DONE):** `normalize_employee_status` maps the full Zoho
+  status list. `Active` and `Serving notice period` stay Active; all separation
+  statuses (Abscond, Terminated, Deceased, Separated through Resignation, Transfer to
+  PreludeSys Inc - India/US, Resigned) map to Inactive. An employee is also set Inactive
+  when `dateOfExit` is on/before today.
 
 ## Open items / to review before go-live
 - **Free-tier cold start:** on Render free tier the instance sleeps after ~15 min idle;
@@ -83,3 +88,132 @@ EmployeeID→employeeId, Full_Name→employeeName, EmailID→email,
 Employeestatus→status, Department→department, Business_unit2→businessUnit,
 Designation→designation, Dateofjoining→dateOfJoining, Dateofexit→dateOfExit,
 Reporting_To→reportingManagerId, Functional_Head_Name→functionalHeadId.
+
+> NOTE: the `status` argument must map to the **Employee Status** field (values like
+> Active / Serving notice period / Abscond / Terminated / Resigned / Transfer …),
+> not a separate "Exit status" field, so the backend can mark leavers Inactive.
+
+## Zoho People custom function (with cold-start retry)
+Update `lmsUrl` to the production URL and the `Authorization` bearer to the production
+`ZOHO_SYNC_API_TOKEN` before go-live.
+
+```javascript
+// LearnFlow LMS Employee Sync from Zoho People
+recordId = ifnull(input.ID,"");
+info "LEARNFLOW EMPLOYEE SYNC START | Zoho Record ID = " + recordId;
+
+// Backend URL — change to the production URL when going live
+lmsUrl = "https://learnflow-backend-j1bd.onrender.com/api/zoho/employees/sync";
+
+payload = Map();
+payload.put("employeeId",ifnull(input.EmployeeID,""));
+payload.put("employeeName",ifnull(input.Full_Name,""));
+payload.put("email",ifnull(input.EmailID,""));
+payload.put("status",ifnull(input.Employeestatus,"Active"));
+payload.put("department",ifnull(input.Department,""));
+payload.put("businessUnit",ifnull(input.Business_unit2,""));
+payload.put("designation",ifnull(input.Designation,""));
+payload.put("dateOfJoining",ifnull(input.Dateofjoining,""));
+payload.put("dateOfExit",ifnull(input.Dateofexit,""));
+payload.put("role","employee");
+payload.put("currentSkills","");
+
+payload.put("reportingManagerId","");
+payload.put("reportingManagerEmail","");
+payload.put("functionalHeadId","");
+payload.put("functionalHeadEmail","");
+
+try
+{
+	if(input.Reporting_To != null)
+	{
+		payload.put("reportingManagerId", input.Reporting_To.toString());
+	}
+}
+catch (e)
+{
+	info "Reporting manager mapping skipped: " + e;
+}
+
+try
+{
+	if(input.Functional_Head_Name != null)
+	{
+		payload.put("functionalHeadId", input.Functional_Head_Name.toString());
+	}
+}
+catch (e)
+{
+	info "Functional head mapping skipped: " + e;
+}
+
+headers = Map();
+headers.put("Content-Type","application/json");
+headers.put("Authorization","Bearer test123");   // change to production ZOHO_SYNC_API_TOKEN
+
+info "LEARNFLOW LMS SYNC PAYLOAD:";
+info payload;
+
+// Retry up to 3 times: the free-tier instance can time out on the first (cold-start) call
+response = "";
+success = false;
+attempt = 1;
+while(attempt <= 3 && success == false)
+{
+	try
+	{
+		response = invokeurl
+		[
+			url :lmsUrl
+			type :POST
+			body:payload.toString()
+			headers:headers
+		];
+		success = true;
+	}
+	catch (e)
+	{
+		info "Attempt " + attempt + " failed (likely cold start): " + e;
+		attempt = attempt + 1;
+	}
+}
+
+info "LEARNFLOW LMS SYNC RESPONSE:";
+info response;
+info "LEARNFLOW EMPLOYEE SYNC END";
+return "success";
+```
+
+## Detailed go-live steps (production)
+Order: (A) live database → (B) live backend → (C) point Zoho at it → (D) live frontend.
+
+### A. Live PostgreSQL database
+1. Render → New + → PostgreSQL → name it (e.g. `learnflow-db-prod`) → **paid plan**
+   (the free Postgres is deleted after ~30 days) → Create.
+2. Open it → copy the **Internal Database URL**.
+
+### B. Live backend web service
+1. Render → New + → Web Service → connect this GitHub repo → branch `main`.
+2. Root Directory: `backend`
+   Build Command: `pip install -r requirements.txt`
+   Start Command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+   Instance: **paid / always-on** (avoids cold-start timeouts).
+3. Environment variables:
+   - `DATABASE_URL` = Internal Database URL from step A
+   - `ZOHO_SYNC_API_TOKEN` = a strong secret (NOT `test123`)
+4. Deploy; confirm logs show `Application startup complete.` +
+   `Reference training data loaded successfully.` with no traceback.
+5. Note the live backend URL.
+
+### C. Point Zoho at production
+1. In the Zoho function, set `lmsUrl` to `<live-backend-url>/api/zoho/employees/sync`.
+2. Set the `Authorization` header to `Bearer <ZOHO_SYNC_API_TOKEN>` (same secret as B3).
+3. Test: run once → `action:"created"`; run again → `action:"updated"`; set a past
+   `dateOfExit` → `status:"Inactive"`.
+
+### D. Live frontend
+1. Deploy the `frontend` folder (Render Static Site or Vercel).
+2. Set `VITE_API_BASE_URL` = the live backend URL.
+3. Build: `npm install && npm run build`; publish `dist`.
+4. Log in as L&D and confirm a synced employee shows correct department / BU /
+   designation / status.
