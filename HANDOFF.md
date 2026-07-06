@@ -6,12 +6,16 @@ Zoho People → LearnFlow LMS employee sync is **working on the test environment
 `github.com/najmakowser/learnflow-backend-test`. This doc explains what was fixed
 and what's needed to deploy to the **main/production** environment.
 
-## Current status
+## Current status — fully validated end-to-end on the test environment
 - ✅ Backend deploys and runs on Render against PostgreSQL.
 - ✅ `POST /api/zoho/employees/sync` works end-to-end from a Zoho People custom function.
-- ✅ Supports: new joiner (create), detail update, and **exit auto-deactivation**
-  (employee marked `Inactive` when `dateOfExit` is on/before today).
-- ✅ Data persists across restarts (moved off ephemeral SQLite to PostgreSQL).
+- ✅ New joiner (create), detail update, and **exit auto-deactivation**
+  (Inactive when `dateOfExit` is on/before today, or when Zoho status is a separation).
+- ✅ Real Zoho statuses mapped correctly (e.g. "Separated through Resignation" → Inactive).
+- ✅ Manager & FH references resolved to real IDs (e.g. "Najma … - 3772" → `3772`).
+- ✅ Managers auto-detected from designation, get a login password, and can sign in.
+- ✅ Reporting manager sees their **active** team; exited employees are filtered out.
+- ✅ Data persists across restarts/redeploys (PostgreSQL, not ephemeral SQLite).
 - Test backend URL: `https://learnflow-backend-j1bd.onrender.com`
 - Sync endpoint: `https://learnflow-backend-j1bd.onrender.com/api/zoho/employees/sync`
 
@@ -28,7 +32,28 @@ and what's needed to deploy to the **main/production** environment.
 6. `241eaee` — Fix Zoho sync 500 on Postgres: commit/rollback around the
    `ensure_zoho_sync_columns` ALTER statements so a failed ALTER doesn't poison
    the request transaction.
+7. `a069da7` — Resolve Zoho manager/FH `'Name - ID'` refs to real LMS employee IDs.
+8. `92fc13b` — Protect Zoho-synced employees from the seed's stale-deletion (they were
+   being wiped on every restart because they aren't in dataset.xlsx).
+9. `ab19bf9` — Map the full Zoho status list to Active/Inactive (Abscond, Terminated,
+   Deceased, Separated through Resignation, Transfer to PreludeSys …, Resigned →
+   Inactive; Active / Serving notice period → Active).
+10. `9c47c85` — Replace SQLite-only `date('now')` in the dashboard and FH-PDF queries
+    (was 500 on Postgres).
+11. `8744b26` — Give synced manager/FH/L&D accounts a default login password
+    (`LS@<employee_id>#2026`) so they can sign in; employees stay password-less.
+12. `69744f7` — Infer manager/functional_head role from designation when Zoho sends
+    `employee` (Manager/Lead/Head → manager; Functional Head/Director/VP/Head of → FH).
 (The trainings seed-insert column fix `4d46fa8` was already on `main`.)
+
+## Role & login reference
+- **Role:** send an explicit `role` from Zoho for precision, or rely on designation
+  inference (`derive_lms_role` in `main.py`). Employees have no portal login.
+- **Manager/FH/L&D login password:** `LS@<employee_id>#2026` (e.g. `LS@3772#2026`).
+  Set on sync only if no password exists yet (never overwrites a chosen password).
+  For production, consider forcing a password reset / SSO instead of the default scheme.
+- **Verify a manager's reportees (no login needed):**
+  `GET /api/employees/<manager_id>/reportees` (add `?include_inactive=true` to see exited).
 
 ## To deploy to the MAIN / production environment
 1. **Pull latest `main`** — all fixes are included.
