@@ -84,6 +84,25 @@ and what's needed to deploy to the **main/production** environment.
   the same value in the Zoho function's `Authorization: Bearer <token>` header.
   Do not ship with `test123`.
 
+### ZOHO_SYNC_API_TOKEN — what it is and how to set it
+This is **a secret you create yourself** (NOT obtained from Zoho). It's a shared key
+that must match in two places so only your Zoho function can call the sync endpoint.
+
+1. **Generate a strong secret** (PowerShell):
+   ```powershell
+   [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
+   ```
+   (Any long random string with no spaces works.)
+2. **Backend:** Render → production backend service → Environment → set
+   `ZOHO_SYNC_API_TOKEN = <the secret>` → Save (redeploys).
+3. **Zoho:** in the Deluge function change
+   `headers.put("Authorization","Bearer test123");` to
+   `headers.put("Authorization","Bearer <the same secret>");`
+4. **Test:** run the sync. A `401 "Invalid Zoho sync token"` means the two values
+   don't match exactly (typo/space).
+- Keep it secret: never commit it to Git or share it. If it leaks, generate a new one
+  and update both the backend env var and the Zoho header.
+
 ## Resolved
 - **Reporting manager / FH mapping (DONE):** Zoho sends these as `'Full Name - EmployeeID'`.
   `resolve_manager_id` now extracts and resolves the real LMS `employee_id`
