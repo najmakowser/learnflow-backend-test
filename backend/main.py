@@ -222,17 +222,30 @@ def normalize_lms_role(role: str) -> str:
 
 
 def derive_lms_role(role_value: str, designation: str) -> str:
-    """Determine the LMS role for a synced person.
+    """Determine the LMS role from the Zoho People 'Role' field value.
 
-    If Zoho sends an explicit non-employee role, honour it. Otherwise infer from the
-    designation text so managers/functional heads sync with the right role (and can log
-    in) even when Zoho only sends 'employee'. For precise control, send an explicit role
-    from Zoho instead of relying on this inference.
+    LevelShift's Zoho 'Role' field holds values such as 'Functional Head - Finance',
+    'HR Functional Head', 'Reporting Authority', 'IN - HROps RA', 'India HR - RA',
+    'Manager-US HR', 'CEO India', 'COO'. These decide who gets portal access:
+      - contains 'Functional Head' / 'CEO' / 'COO'          -> functional_head
+      - contains 'Reporting Authority' / 'RA' / 'Manager'   -> manager
+      - anything else or blank                              -> employee (no portal login)
+    If the role value is blank, fall back to designation keywords.
     """
+    # If an already-normalised LMS role was sent, honour it.
     explicit = normalize_lms_role(role_value)
     if explicit != "employee":
         return explicit
 
+    value = (role_value or "").strip().lower()
+    if value:
+        if "functional head" in value or "ceo" in value or "coo" in value:
+            return "functional_head"
+        if "reporting authority" in value or "manager" in value or re.search(r"\bra\b", value):
+            return "manager"
+        return "employee"
+
+    # Fallback: infer from designation when Zoho sent no role value.
     d = (designation or "").strip().lower()
     if any(k in d for k in ("functional head", "director", "vice president", "head of")):
         return "functional_head"
@@ -472,18 +485,15 @@ def sync_zoho_employee(
         target_employee_id = employee_id
 
     # Managers / FH / L&D need to log in, but Zoho-synced rows have no password.
-    # Give them a default login password (same scheme as the seed) if none is set yet.
-    # Employees don't have portal login, so they're left without a password.
+    # Give them the shared common login password if none is set yet. Employees have no
+    # portal login, so they're left without a password.
+    # The common password can be overridden with the LMS_COMMON_PASSWORD env var.
     if normalize_lms_role(payload.role) in {"manager", "functional_head", "ld_admin", "ld_manager"}:
-        current = row(conn.execute(
-            "SELECT password_hash FROM employees WHERE employee_id=?",
-            (target_employee_id,),
-        ))
-        if not (current and current.get("password_hash")):
-            conn.execute(
-                "UPDATE employees SET password_hash=? WHERE employee_id=?",
-                (hash_password(default_password_for_user(target_employee_id)), target_employee_id),
-            )
+        common_password = os.environ.get("LMS_COMMON_PASSWORD", "LevelShift@2026")
+        conn.execute(
+            "UPDATE employees SET password_hash=? WHERE employee_id=?",
+            (hash_password(common_password), target_employee_id),
+        )
 
     log_action(
         conn,
