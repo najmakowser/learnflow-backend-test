@@ -301,7 +301,12 @@ def seed():
     conn = get_connection()
     c = conn.cursor()
 
-    if c.execute("SELECT COUNT(*) FROM trainings").fetchone()[0] == 0:
+    # Demo/sample data (dummy employees + sample trainings) loads only when enabled.
+    # In production set SEED_DEMO_DATA=false so ONLY real Zoho-synced data appears
+    # (e.g. the Functional Head dropdown then shows real FHs, not seed names).
+    seed_demo_data = os.environ.get("SEED_DEMO_DATA", "true").strip().lower() not in ("false", "0", "no")
+
+    if seed_demo_data and c.execute("SELECT COUNT(*) FROM trainings").fetchone()[0] == 0:
         c.executemany(
             """INSERT INTO trainings
                (training_id, course_name, category, mode, duration, trainer_name,
@@ -310,7 +315,11 @@ def seed():
             TRAININGS
         )
 
-    roster_entries = load_from_excel(DATASET_XLSX)
+    if seed_demo_data:
+        roster_entries = load_from_excel(DATASET_XLSX)
+    else:
+        print("SEED_DEMO_DATA is off - skipping demo employees & sample trainings (production mode).")
+        roster_entries = []
     credential_entries = []
     roster_ids = {entry["employee_id"] for entry in roster_entries if entry.get("employee_id")}
     if roster_ids:
